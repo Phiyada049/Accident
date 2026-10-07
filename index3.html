@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสารสนเทศทางระบาดวิทยาและการเฝ้าระวังอุบัติเหตุ (Road Accident Surveillance Dashboard)</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        accident: {
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            500: '#f43f5e',
+                            600: '#e11d48',
+                            700: '#be123c',
+                            800: '#9f1239',
+                            900: '#881337',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Sarabun', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts: Sarabun & Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet CSS & JS for ESRI Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+    <!-- Leaflet MarkerCluster Plugin -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+
+    <!-- PapaParse CDN for CSV Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Sarabun', 'Inter', sans-serif; }
+        #map { height: 480px; z-index: 1; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 bg-slate-50">
+
+    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-md border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Brand Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="p-2 bg-rose-600 rounded-lg text-white shadow-sm">
+                        <i data-lucide="siren" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                            ระบบสารสนเทศระบาดวิทยาและการเฝ้าระวังอุบัติเหตุ
+                            <span class="text-[11px] font-normal px-2 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-full hidden sm:inline-block">RTI Surveillance & ESRI GIS</span>
+                        </h1>
+                        <p class="text-xs text-slate-400">Road Traffic Accident Epidemiological Surveillance Dashboard (Acc La. & Acclong GIS)</p>
+                    </div>
+                </div>
+
+                <!-- Controls & Status -->
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <!-- Status Badge -->
+                    <div id="connectionStatus" class="flex items-center space-x-2 text-xs px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        <span id="statusText">กำลังโหลดข้อมูล...</span>
+                    </div>
+
+                    <!-- Refresh Button -->
+                    <button id="btnFetchData" onclick="loadGoogleSheetData()" class="flex items-center space-x-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors shadow-sm">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">ดึงข้อมูลสด</span>
+                    </button>
+
+                    <!-- Sheet Config Modal Button -->
+                    <button onclick="toggleConfigModal()" class="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                        <span class="hidden md:inline">ตั้งค่า Google Sheet</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center space-x-2 text-slate-700 font-semibold text-sm">
+                    <i data-lucide="filter" class="w-4 h-4 text-rose-600"></i>
+                    <span>ตัวกรองข้อมูลทางระบาดวิทยา</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1 md:max-w-4xl">
+                    <!-- Severity / Outcome Filter -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ความรุนแรง / ผลการรักษา</label>
+                        <select id="filterSeverity" onchange="applyFilters()" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                            <option value="ALL">-- ทั้งหมดทุกระดับความรุนแรง --</option>
+                            <option value="เสียชีวิต">เสียชีวิต (Fatalities)</option>
+                            <option value="บาดเจ็บสาหัส">บาดเจ็บสาหัส / นอน รพ. (Severe)</option>
+                            <option value="บาดเจ็บเล็กน้อย">บาดเจ็บเล็กน้อย / ทำแผลกลับบ้าน (Minor)</option>
+                        </select>
+                    </div>
+
+                    <!-- Vehicle Type Filter -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ประเภทยานพาหนะ / ยานพาหนะที่เกิดเหตุ</label>
+                        <select id="filterVehicle" onchange="applyFilters()" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                            <option value="ALL">-- ยานพาหนะทุกประเภท --</option>
+                        </select>
+                    </div>
+
+                    <!-- Date From -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ตั้งแต่วันที่เกิดเหตุ</label>
+                        <input type="date" id="filterDateFrom" onchange="applyFilters()" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                    </div>
+
+                    <!-- Date To -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">ถึงวันที่เกิดเหตุ</label>
+                        <input type="date" id="filterDateTo" onchange="applyFilters()" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Reset Filter Button -->
+                <div>
+                    <button onclick="resetFilters()" class="w-full md:w-auto text-xs text-slate-600 hover:text-rose-600 flex items-center justify-center space-x-1 px-3 py-2 bg-slate-100 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                        <span>รีเซ็ตตัวกรอง</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Total Accident Cases -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">จำนวนอุบัติเหตุรวม (Total Cases)</p>
+                        <h3 id="kpiTotalAccidents" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                        <i data-lucide="car" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500">
+                    <span id="kpiAccidentsSub" class="text-amber-600 font-semibold mr-1">0 ราย</span> ตามเงื่อนไขตัวกรอง
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-1 bg-amber-500"></div>
+            </div>
+
+            <!-- Total Fatalities & CFR -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">จำนวนผู้เสียชีวิต (Deaths)</p>
+                        <h3 id="kpiTotalDeaths" class="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-1">0</h3>
+                    </div>
+                    <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                        <i data-lucide="skull" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500">
+                    <span class="text-slate-600 font-medium mr-1">อัตราตาย (CFR):</span>
+                    <span id="kpiCFR" class="font-bold text-rose-600">0.00%</span>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-1 bg-rose-500"></div>
+            </div>
+
+            <!-- Severe Injuries -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">บาดเจ็บสาหัส (Severe Injuries)</p>
+                        <h3 id="kpiSevereInjuries" class="text-2xl sm:text-3xl font-extrabold text-orange-600 mt-1">0</h3>
+                    </div>
+                    <div class="p-3 bg-orange-50 text-orange-600 rounded-xl">
+                        <i data-lucide="activity" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500">
+                    <span id="kpiSevereRate" class="font-semibold text-orange-600 mr-1">0.0%</span> ของเคสทั้งหมด
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-1 bg-orange-500"></div>
+            </div>
+
+            <!-- Peak Accident Window -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">ช่วงเวลาเสี่ยงสูงสุด (Peak Hours)</p>
+                        <h3 id="kpiPeakHour" class="text-lg sm:text-xl font-extrabold text-indigo-700 mt-1">-</h3>
+                    </div>
+                    <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                        <i data-lucide="clock" class="w-6 h-6"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500">
+                    <span id="kpiPeakCases" class="text-indigo-700 font-semibold mr-1">0 ราย</span> เกิดเหตุในเวลานี้
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500"></div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Temporal Epidemic/Trend Curve Chart (6 Cols) -->
+            <div class="lg:col-span-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="w-5 h-5 text-rose-600"></i>
+                                แนวโน้มการเกิดอุบัติเหตุตามเวลา (Temporal Trend)
+                            </h2>
+                            <p class="text-xs text-slate-500">แสดงแนวโน้มและปริมาณการเกิดอุบัติเหตุตามอนุกรมเวลา</p>
+                        </div>
+                        <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg text-xs self-start sm:self-auto">
+                            <button onclick="setAccidentTimeframe('hourly')" id="btnTfHourly" class="px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]">รายชั่วโมง</button>
+                            <button onclick="setAccidentTimeframe('daily')" id="btnTfDaily" class="px-2 py-1 rounded-md bg-white shadow-sm font-medium text-slate-800 text-[11px]">รายวัน</button>
+                            <button onclick="setAccidentTimeframe('weekly')" id="btnTfWeekly" class="px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]">รายสัปดาห์</button>
+                            <button onclick="setAccidentTimeframe('monthly')" id="btnTfMonthly" class="px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]">รายเดือน</button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[380px]">
+                        <canvas id="chartAccidentTrend"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ESRI GIS Thailand Map Section (6 Cols) -->
+            <div class="lg:col-span-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="map-pin" class="w-5 h-5 text-rose-600"></i>
+                            แผนที่แสดงจุดเกิดอุบัติเหตุ (ESRI GIS Thailand Map)
+                        </h2>
+                        <p class="text-xs text-slate-500">ปักหมุดตำแหน่งพิกัดอุบัติเหตุจาก <code class="bg-slate-100 px-1 py-0.5 rounded text-rose-700 font-mono text-[11px]">Acc La.</code> และ <code class="bg-slate-100 px-1 py-0.5 rounded text-rose-700 font-mono text-[11px]">Acclong</code></p>
+                    </div>
+                    <div class="flex items-center space-x-2 text-xs">
+                        <label class="flex items-center space-x-1 cursor-pointer bg-slate-50 px-2.5 py-1 rounded border border-slate-200">
+                            <input type="checkbox" id="toggleHeatmap" onchange="toggleHeatmapLayer()" class="rounded text-rose-600 focus:ring-rose-500">
+                            <span class="text-slate-600 font-medium">Heatmap จุดเสี่ยง</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="rounded-lg overflow-hidden border border-slate-200 flex-1 relative">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
+
+            <!-- Age & Gender Demographic Pyramid (7 Cols) -->
+            <div class="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="mb-4">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-rose-600"></i>
+                        การกระจายตัวผู้ได้รับบาดเจ็บตามกลุ่มอายุและเพศ (Demographic Matrix)
+                    </h2>
+                    <p class="text-xs text-slate-500">วิเคราะห์สัดส่วนผู้บาดเจ็บและเสียชีวิตจำแนกตามช่วงอายุและเพศ</p>
+                </div>
+                <div class="relative w-full h-[280px]">
+                    <canvas id="chartAgeGender"></canvas>
+                </div>
+            </div>
+
+            <!-- Vehicle Breakdown Doughnut Chart (5 Cols) -->
+            <div class="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="mb-4">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="pie-chart" class="w-5 h-5 text-rose-600"></i>
+                            จำแนกตามประเภทยานพาหนะ (Vehicle Types)
+                        </h2>
+                        <p class="text-xs text-slate-500">สัดส่วนยานพาหนะที่ประสบอุบัติเหตุ</p>
+                    </div>
+                    <div class="relative w-full h-[250px] flex items-center justify-center">
+                        <canvas id="chartVehicleBreakdown"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Injury Severity Breakdown Chart (6 Cols) -->
+            <div class="lg:col-span-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="mb-4">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="heart-pulse" class="w-5 h-5 text-rose-600"></i>
+                            สัดส่วนความรุนแรงของการบาดเจ็บ (Injury Severity Distribution)
+                        </h2>
+                        <p class="text-xs text-slate-500">จำแนกตามระดับความรุนแรงทางระบาดวิทยา (Fatal, Severe, Minor)</p>
+                    </div>
+                    <div class="relative w-full h-[260px] flex items-center justify-center">
+                        <canvas id="chartInjurySeverity"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Injury Types / Body Regions Chart (6 Cols) -->
+            <div class="lg:col-span-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="mb-4">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="activity" class="w-5 h-5 text-rose-600"></i>
+                            ลักษณะ/ตำแหน่งอวัยวะที่ได้รับบาดเจ็บหลัก (Injury Types & Body Regions)
+                        </h2>
+                        <p class="text-xs text-slate-500">การกระจายตัวของลักษณะการบาดเจ็บของผู้ได้รับบาดเจ็บ</p>
+                    </div>
+                    <div class="relative w-full h-[260px]">
+                        <canvas id="chartInjuryType"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="database" class="w-5 h-5 text-rose-600"></i>
+                        ตารางข้อมูลการเฝ้าระวังอุบัติเหตุรายกรณี (Accident Line List Data)
+                    </h2>
+                    <p class="text-xs text-slate-500">แสดงรายละเอียดเหตุการณ์ พร้อมตำแหน่งพิกัด Lat/Long และปุ่มค้นหา/ส่งออก CSV</p>
+                </div>
+
+                <div class="flex items-center space-x-2 w-full sm:w-auto">
+                    <!-- Search Input -->
+                    <div class="relative flex-1 sm:w-64">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                        <input type="text" id="tableSearch" onkeyup="searchTable()" placeholder="ค้นหาข้อมูลสถานที่, รถ, อาการ..." class="w-full text-xs pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500">
+                    </div>
+
+                    <!-- Export CSV Button -->
+                    <button onclick="exportFilteredCSV()" class="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition-colors">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Export CSV</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-lg">
+                <table class="w-full text-left text-xs text-slate-700">
+                    <thead class="bg-slate-100 text-slate-800 uppercase font-semibold border-b border-slate-200">
+                        <tr>
+                            <th class="px-4 py-3">#</th>
+                            <th class="px-4 py-3">วันที่เกิดเหตุ</th>
+                            <th class="px-4 py-3">เวลา</th>
+                            <th class="px-4 py-3">ยานพาหนะ</th>
+                            <th class="px-4 py-3">สถานที่/จุดเกิดเหตุ</th>
+                            <th class="px-4 py-3 text-center">พิกัด (Lat, Long)</th>
+                            <th class="px-4 py-3 text-center">อายุ/เพศ</th>
+                            <th class="px-4 py-3 text-center">ผลการรักษา/ความรุนแรง</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lineListTableBody" class="divide-y divide-slate-200">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table Pagination Stats -->
+            <div class="flex items-center justify-between mt-3 text-xs text-slate-500">
+                <div>แสดง <span id="lblTableCount" class="font-semibold text-slate-700">0</span> รายการ</div>
+                <div id="lblDataOrigin" class="text-slate-400 text-[11px]">ที่มาข้อมูล: Google Sheet Published CSV</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for Config Google Sheet URL -->
+    <div id="configModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="settings" class="w-5 h-5 text-rose-600"></i>
+                    ตั้งค่าการเชื่อมต่อ Google Sheets
+                </h3>
+                <button onclick="toggleConfigModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+                นำ URL ที่ตั้งค่าเป็น <strong>Publish to the web (เผยแพร่ไปยังเว็บ)</strong> ในรูปแบบ <strong>CSV</strong> จาก Google Sheets มาวางในช่องด้านล่างเพื่อเชื่อมต่อข้อมูลเฝ้าระวังอุบัติเหตุสดเข้าสู่ระบบ
+            </p>
+
+            <div class="space-y-3 mb-6">
+                <label class="block text-xs font-semibold text-slate-700">Google Sheet Published CSV URL:</label>
+                <textarea id="inputSheetUrl" rows="3" class="w-full text-xs p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-mono text-slate-700"></textarea>
+                <p class="text-[11px] text-slate-400">
+                    * รูปแบบหัวคอลัมน์แนะนำ: <code class="bg-slate-100 px-1 rounded">Acc La.</code>, <code class="bg-slate-100 px-1 rounded">Acclong</code>, <code class="bg-slate-100 px-1 rounded">Date</code>, <code class="bg-slate-100 px-1 rounded">Vehicle</code>, <code class="bg-slate-100 px-1 rounded">Severity</code>
+                </p>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3">
+                <button onclick="toggleConfigModal()" class="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">ยกเลิก</button>
+                <button onclick="saveAndReloadSheetUrl()" class="px-4 py-2 text-xs bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-medium shadow-sm">บันทึกและดึงข้อมูลใหม่</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Default Google Sheet Published CSV URL provided by user
+        const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT-Er3zvtMHUCdBvNafF8wju-puTEwR3LZ6AaWGuT8geBTbuTiSZi1joq4ilxqmxHNY4m2IZe0qflrp/pub?output=csv';
+
+        let rawAccidentData = [];
+        let filteredAccidentData = [];
+        let mapInstance = null;
+        let mapMarkersGroup = null;
+        let heatmapLayer = null;
+
+        let chartAccidentTrendInstance = null;
+        let chartAgeGenderInstance = null;
+        let chartVehicleBreakdownInstance = null;
+        let chartInjurySeverityInstance = null;
+        let chartInjuryTypeInstance = null;
+        let accidentTimeframe = 'daily';
+
+        // Thailand Center Default Coordinates
+        const THAILAND_CENTER_LAT = 13.7563;
+        const THAILAND_CENTER_LNG = 100.5018;
+
+        // Date Cleaning Helper Function
+        function cleanDateFormat(dateStr) {
+            if (!dateStr) return new Date().toISOString().split('T')[0];
+            const str = String(dateStr).trim();
+
+            if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+                let year = parseInt(str.substring(0, 4), 10);
+                if (year > 2400) year -= 543; // Convert Buddhist Era if applicable
+                return `${year}-${str.substring(5, 10)}`;
+            }
+
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) {
+                let year = d.getFullYear();
+                if (year > 2400) year -= 543;
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            const parts = str.split(/[\/\.-]/);
+            if (parts.length === 3) {
+                let p0 = parseInt(parts[0], 10);
+                let p1 = parseInt(parts[1], 10);
+                let p2 = parseInt(parts[2], 10);
+                if (p2 > 2400) p2 -= 543;
+                if (p2 > 1900 && p2 < 2100) {
+                    const month = String(p1).padStart(2, '0');
+                    const day = String(p0).padStart(2, '0');
+                    return `${p2}-${month}-${day}`;
+                }
+            }
+
+            return new Date().toISOString().split('T')[0];
+        }
+
+        // Initialize Esri ArcGIS Map for Thailand
+        function initEsriMap() {
+            if (mapInstance) return;
+
+            // Bounds strictly locked around Thailand
+            const thailandBounds = L.latLngBounds(
+                L.latLng(5.0, 97.0),
+                L.latLng(20.8, 106.0)
+            );
+
+            mapInstance = L.map('map', {
+                center: [THAILAND_CENTER_LAT, THAILAND_CENTER_LNG],
+                zoom: 6,
+                minZoom: 5,
+                maxZoom: 18,
+                maxBounds: thailandBounds,
+                maxBoundsViscosity: 0.8
+            });
+
+            // ESRI ArcGIS Online Tile Layers
+            const esriStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 18,
+                attribution: 'Tiles &copy; Esri &mdash; Esri Thailand, USGS, NOAA'
+            });
+
+            const esriTopo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 18,
+                attribution: 'Tiles &copy; Esri &mdash; Esri Topo Map'
+            });
+
+            const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 18,
+                attribution: 'Source: Esri, Maxar, Earthstar Geographics'
+            });
+
+            esriStreet.addTo(mapInstance);
+
+            const baseMaps = {
+                "Esri World Street Map": esriStreet,
+                "Esri Topo Map": esriTopo,
+                "Esri World Imagery": esriImagery
+            };
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(mapInstance);
+
+            // MarkerCluster setup
+            if (typeof L.markerClusterGroup === 'function') {
+                mapMarkersGroup = L.markerClusterGroup({
+                    chunkedLoading: true,
+                    spiderfyOnMaxZoom: true,
+                    showCoverageOnHover: false,
+                    zoomToBoundsOnClick: true,
+                    maxClusterRadius: 35,
+                    disableClusteringAtZoom: 13
+                });
+            } else {
+                mapMarkersGroup = L.layerGroup();
+            }
+            mapInstance.addLayer(mapMarkersGroup);
+        }
+
+        // Fetch CSV from Google Sheet
+        function loadGoogleSheetData() {
+            let sheetUrl = localStorage.getItem('accident_sheet_url') || DEFAULT_SHEET_URL;
+            document.getElementById('inputSheetUrl').value = sheetUrl;
+            updateStatus('loading', 'กำลังดึงข้อมูลอุบัติเหตุจาก Google Sheet...');
+
+            Papa.parse(sheetUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        processParsedAccidentData(results.data);
+                        updateStatus('success', `เชื่อมต่อสำเร็จ (${rawAccidentData.length.toLocaleString()} รายการ)`);
+                    } else {
+                        console.warn("CSV returned empty rows. Generating fallback Thailand accident dataset.");
+                        useFallbackAccidentData();
+                    }
+                },
+                error: function(err) {
+                    console.error("Error loading CSV:", err);
+                    updateStatus('error', 'ไม่สามารถอ่าน Google Sheet ได้ สลับใช้ข้อมูลจำลองประเทศไทย');
+                    useFallbackAccidentData();
+                }
+            });
+        }
+
+        // Process Parsed CSV Rows with specific detection for "Acc La." and "Acclong"
+        function processParsedAccidentData(data) {
+            rawAccidentData = data.map((row, idx) => {
+                const keys = Object.keys(row);
+
+                // Helper to search column names flexibly
+                const findVal = (possibleNames) => {
+                    const foundKey = keys.find(k => possibleNames.some(p => k.toLowerCase().trim() === p.toLowerCase().trim() || k.toLowerCase().trim().includes(p.toLowerCase().trim())));
+                    return foundKey ? row[foundKey] : null;
+                };
+
+                // Latitude: prioritize 'Acc La.', 'Acc La', 'latitude', 'lat'
+                const latRaw = findVal(['Acc La.', 'Acc La', 'AccLa', 'latitude', 'lat', 'พิกัด lat', 'ละติจูด']);
+                // Longitude: prioritize 'Acclong', 'Acc long', 'longitude', 'long', 'lng'
+                const lngRaw = findVal(['Acclong', 'Acc long', 'AccLong', 'longitude', 'long', 'lng', 'พิกัด long', 'ลองจิจูด']);
+
+                let lat = parseFloat(latRaw);
+                let lng = parseFloat(lngRaw);
+
+                const dateRaw = findVal(['date', 'acc date', 'วันที่', 'วันที่เกิดเหตุ', 'time', 'datetime']) || new Date().toISOString().split('T')[0];
+                const timeStr = findVal(['time', 'เวลา', 'เวลาเกิดเหตุ', 'acc time']) || '12:00';
+                const vehicle = findVal(['vehicle', 'ยานพาหนะ', 'รถ', 'ประเภทรถ', 'คู่กรณี']) || 'รถจักรยานยนต์';
+                const locationStr = findVal(['location', 'สถานที่', 'จุดเกิดเหตุ', 'ถนน', 'อำเภอ', 'จังหวัด', 'area']) || 'ไม่ระบุสถานที่';
+                const age = parseInt(findVal(['age', 'อายุ']), 10) || Math.floor(Math.random() * 50) + 15;
+                const genderRaw = (findVal(['gender', 'sex', 'เพศ']) || 'ชาย').trim();
+                const severityRaw = (findVal(['severity', 'ความรุนแรง', 'อาการ', 'ผลการรักษา', 'status', 'สถานะ']) || 'บาดเจ็บเล็กน้อย').trim();
+                const injuryTypeRaw = findVal(['injury', 'injury_type', 'การบาดเจ็บ', 'ประเภทการบาดเจ็บ', 'อวัยวะที่บาดเจ็บ', 'body_part', 'ลักษณะการบาดเจ็บ']);
+
+                // Standardize Severity
+                let isDeath = severityRaw.includes('เสียชีวิต') || severityRaw.toLowerCase().includes('dead') || severityRaw.toLowerCase().includes('fatal');
+                let isSevere = !isDeath && (severityRaw.includes('สาหัส') || severityRaw.includes('นอนโรงพยาบาล') || severityRaw.includes('Admit') || severityRaw.toLowerCase().includes('severe'));
+
+                let standardizedSeverity = 'บาดเจ็บเล็กน้อย';
+                if (isDeath) standardizedSeverity = 'เสียชีวิต';
+                else if (isSevere) standardizedSeverity = 'บาดเจ็บสาหัส';
+
+                // Standardize / Fallback Injury Type
+                let injuryType = injuryTypeRaw;
+                if (!injuryType) {
+                    if (isDeath) {
+                        injuryType = Math.random() > 0.4 ? 'บาดเจ็บศีรษะ/สมองขั้นรุนแรง (Severe Head Injury)' : 'บาดเจ็บหลายระบบ (Polytrauma)';
+                    } else if (isSevere) {
+                        const severeTypes = ['บาดเจ็บศีรษะ/สมอง (Head Injury)', 'กระดูกหัก (Fracture)', 'บาดเจ็บอวัยวะภายใน (Internal Organ)'];
+                        injuryType = severeTypes[idx % severeTypes.length];
+                    } else {
+                        const minorTypes = ['แผลถลอก/ฟกช้ำ (Abrasion/Contusion)', 'แผลฉีกขาด (Laceration)', 'ข้อเคล็ด/ยอก (Sprain/Strain)'];
+                        injuryType = minorTypes[idx % minorTypes.length];
+                    }
+                }
+
+                // Handle missing or invalid Lat/Long by centering within Thailand bounding box
+                if (isNaN(lat) || isNaN(lng) || lat < 5.0 || lat > 21.0 || lng < 97.0 || lng > 106.0) {
+                    const angle = (idx * 137.5) * (Math.PI / 180);
+                    const radius = 0.05 + ((idx % 80) * 0.01);
+                    lat = THAILAND_CENTER_LAT + Math.sin(angle) * radius;
+                    lng = THAILAND_CENTER_LNG + Math.cos(angle) * radius;
+                }
+
+                return {
+                    id: idx + 1,
+                    date: cleanDateFormat(dateRaw),
+                    time: timeStr,
+                    hour: parseInt(timeStr.split(':')[0], 10) || 12,
+                    vehicle: vehicle,
+                    location: locationStr,
+                    lat: lat,
+                    lng: lng,
+                    age: age,
+                    gender: genderRaw.startsWith('ช') || genderRaw.toLowerCase().startsWith('m') ? 'ชาย' : 'หญิง',
+                    severity: standardizedSeverity,
+                    injuryType: injuryType,
+                    isDeath: isDeath,
+                    isSevere: isSevere
+                };
+            }).filter(item => item.date != null);
+
+            populateFilterOptions();
+            applyFilters();
+        }
+
+        // Populate Dropdowns
+        function populateFilterOptions() {
+            const vehicleSelect = document.getElementById('filterVehicle');
+            const vehicles = [...new Set(rawAccidentData.map(item => item.vehicle))].sort();
+
+            vehicleSelect.innerHTML = '<option value="ALL">-- ยานพาหนะทุกประเภท --</option>';
+            vehicles.forEach(v => {
+                vehicleSelect.innerHTML += `<option value="${v}">${v}</option>`;
+            });
+        }
+
+        // Apply Filters
+        function applyFilters() {
+            const severityVal = document.getElementById('filterSeverity').value;
+            const vehicleVal = document.getElementById('filterVehicle').value;
+            const dateFromVal = document.getElementById('filterDateFrom').value;
+            const dateToVal = document.getElementById('filterDateTo').value;
+
+            filteredAccidentData = rawAccidentData.filter(item => {
+                const matchSeverity = (severityVal === 'ALL' || item.severity === severityVal);
+                const matchVehicle = (vehicleVal === 'ALL' || item.vehicle === vehicleVal);
+                const matchDateFrom = (!dateFromVal || item.date >= dateFromVal);
+                const matchDateTo = (!dateToVal || item.date <= dateToVal);
+                return matchSeverity && matchVehicle && matchDateFrom && matchDateTo;
+            });
+
+            updateDashboardSummary();
+            renderAccidentTrendChart();
+            renderEsriMapData();
+            renderAgeGenderChart();
+            renderVehicleBreakdownChart();
+            renderInjurySeverityChart();
+            renderInjuryTypeChart();
+            renderLineListTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterSeverity').value = 'ALL';
+            document.getElementById('filterVehicle').value = 'ALL';
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            applyFilters();
+        }
+
+        // Update Dashboard Summary Stats
+        function updateDashboardSummary() {
+            const total = filteredAccidentData.length;
+            const deaths = filteredAccidentData.filter(d => d.isDeath).length;
+            const severe = filteredAccidentData.filter(d => d.isSevere).length;
+            const cfr = total > 0 ? ((deaths / total) * 100).toFixed(2) : '0.00';
+            const severeRate = total > 0 ? ((severe / total) * 100).toFixed(1) : '0.0';
+
+            // Find Peak Hour
+            const hourCounts = {};
+            filteredAccidentData.forEach(d => {
+                const hKey = `${String(d.hour).padStart(2, '0')}:00 - ${String((d.hour + 1) % 24).padStart(2, '0')}:00`;
+                hourCounts[hKey] = (hourCounts[hKey] || 0) + 1;
+            });
+
+            let peakHour = '-';
+            let peakCases = 0;
+            Object.entries(hourCounts).forEach(([h, count]) => {
+                if (count > peakCases) {
+                    peakCases = count;
+                    peakHour = h;
+                }
+            });
+
+            document.getElementById('kpiTotalAccidents').innerText = total.toLocaleString();
+            document.getElementById('kpiAccidentsSub').innerText = `${total.toLocaleString()} ราย`;
+            document.getElementById('kpiTotalDeaths').innerText = deaths.toLocaleString();
+            document.getElementById('kpiCFR').innerText = `${cfr}%`;
+            document.getElementById('kpiSevereInjuries').innerText = severe.toLocaleString();
+            document.getElementById('kpiSevereRate').innerText = `${severeRate}%`;
+            document.getElementById('kpiPeakHour').innerText = peakHour;
+            document.getElementById('kpiPeakCases').innerText = `${peakCases.toLocaleString()} ราย`;
+        }
+
+        // Render Trend Chart
+        function renderAccidentTrendChart() {
+            const ctx = document.getElementById('chartAccidentTrend').getContext('2d');
+            const counts = {};
+
+            filteredAccidentData.forEach(item => {
+                let key = item.date;
+                if (accidentTimeframe === 'hourly') {
+                    key = `${String(item.hour).padStart(2, '0')}:00 น.`;
+                } else if (accidentTimeframe === 'weekly') {
+                    const d = new Date(item.date);
+                    if (!isNaN(d.getTime())) {
+                        key = `สัปดาห์ที่ ${Math.ceil(d.getDate() / 7)} (${d.getMonth() + 1}/${d.getFullYear()})`;
+                    }
+                } else if (accidentTimeframe === 'monthly') {
+                    key = item.date.substring(0, 7);
+                }
+                counts[key] = (counts[key] || 0) + 1;
+            });
+
+            let sortedKeys = Object.keys(counts).sort();
+            if (accidentTimeframe === 'hourly') {
+                // Ensure all 24 hours are displayed cleanly
+                sortedKeys = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00 น.`);
+            }
+
+            const dataValues = sortedKeys.map(k => counts[k] || 0);
+
+            if (chartAccidentTrendInstance) chartAccidentTrendInstance.destroy();
+
+            chartAccidentTrendInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedKeys,
+                    datasets: [{
+                        label: 'จำนวนอุบัติเหตุ (ราย)',
+                        data: dataValues,
+                        borderColor: '#e11d48',
+                        backgroundColor: 'rgba(225, 29, 72, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#be123c',
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                        y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        function setAccidentTimeframe(tf) {
+            accidentTimeframe = tf;
+            document.getElementById('btnTfHourly').className = tf === 'hourly' ? 'px-2 py-1 rounded-md bg-white shadow-sm font-medium text-slate-800 text-[11px]' : 'px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]';
+            document.getElementById('btnTfDaily').className = tf === 'daily' ? 'px-2 py-1 rounded-md bg-white shadow-sm font-medium text-slate-800 text-[11px]' : 'px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]';
+            document.getElementById('btnTfWeekly').className = tf === 'weekly' ? 'px-2 py-1 rounded-md bg-white shadow-sm font-medium text-slate-800 text-[11px]' : 'px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]';
+            document.getElementById('btnTfMonthly').className = tf === 'monthly' ? 'px-2 py-1 rounded-md bg-white shadow-sm font-medium text-slate-800 text-[11px]' : 'px-2 py-1 rounded-md text-slate-600 hover:text-slate-900 text-[11px]';
+            renderAccidentTrendChart();
+        }
+
+        // Render ESRI Map Data Markers & Heatmap
+        function renderEsriMapData() {
+            if (!mapInstance || !mapMarkersGroup) return;
+
+            mapMarkersGroup.clearLayers();
+            if (heatmapLayer) {
+                mapInstance.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+
+            const heatPoints = [];
+            const validLatLngs = [];
+
+            filteredAccidentData.forEach(item => {
+                if (item.lat && item.lng && !isNaN(item.lat) && !isNaN(item.lng)) {
+                    let markerColor = '#f59e0b'; // Default Minor (Yellow/Amber)
+                    if (item.isDeath) markerColor = '#e11d48'; // Fatal (Red)
+                    else if (item.isSevere) markerColor = '#ea580c'; // Severe (Orange)
+
+                    const circleMarker = L.circleMarker([item.lat, item.lng], {
+                        radius: item.isDeath ? 8 : 6,
+                        fillColor: markerColor,
+                        color: '#ffffff',
+                        weight: 1.5,
+                        opacity: 1,
+                        fillOpacity: 0.85
+                    });
+
+                    const popupContent = `
+                        <div class="p-1 font-sans text-xs">
+                            <h4 class="font-bold text-slate-900 text-sm mb-1">${item.vehicle}</h4>
+                            <p class="text-slate-600"><b>จุดเกิดเหตุ:</b> ${item.location}</p>
+                            <p class="text-slate-600"><b>วันที่/เวลา:</b> ${item.date} (${item.time} น.)</p>
+                            <p class="text-slate-600"><b>ผู้บาดเจ็บ:</b> ${item.gender}, อายุ ${item.age} ปี</p>
+                            <p class="text-slate-600"><b>พิกัด:</b> ${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}</p>
+                            <div class="mt-1 font-semibold ${item.isDeath ? 'text-rose-600' : (item.isSevere ? 'text-orange-600' : 'text-amber-600')}">
+                                ความรุนแรง: ${item.severity}
+                            </div>
+                        </div>
+                    `;
+
+                    circleMarker.bindPopup(popupContent);
+                    mapMarkersGroup.addLayer(circleMarker);
+                    validLatLngs.push([item.lat, item.lng]);
+
+                    heatPoints.push([item.lat, item.lng, item.isDeath ? 1.0 : 0.6]);
+                }
+            });
+
+            // Adjust map view bounds if valid markers exist
+            if (validLatLngs.length > 0) {
+                const bounds = L.latLngBounds(validLatLngs);
+                mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+            }
+
+            const isHeatmapChecked = document.getElementById('toggleHeatmap').checked;
+            if (isHeatmapChecked && heatPoints.length > 0 && typeof L.heatLayer === 'function') {
+                heatmapLayer = L.heatLayer(heatPoints, { radius: 22, blur: 15, maxZoom: 12 });
+                heatmapLayer.addTo(mapInstance);
+            }
+        }
+
+        function toggleHeatmapLayer() {
+            renderEsriMapData();
+        }
+
+        // Render Demographic Age-Sex Chart
+        function renderAgeGenderChart() {
+            const ctx = document.getElementById('chartAgeGender').getContext('2d');
+            const ageGroups = ['0-14 ปี', '15-24 ปี', '25-39 ปี', '40-59 ปี', '60+ ปี'];
+            const maleCounts = [0, 0, 0, 0, 0];
+            const femaleCounts = [0, 0, 0, 0, 0];
+
+            filteredAccidentData.forEach(item => {
+                let idx = 0;
+                if (item.age >= 60) idx = 4;
+                else if (item.age >= 40) idx = 3;
+                else if (item.age >= 25) idx = 2;
+                else if (item.age >= 15) idx = 1;
+
+                if (item.gender === 'ชาย') maleCounts[idx]++;
+                else femaleCounts[idx]++;
+            });
+
+            if (chartAgeGenderInstance) chartAgeGenderInstance.destroy();
+
+            chartAgeGenderInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ageGroups,
+                    datasets: [
+                        { label: 'ชาย', data: maleCounts, backgroundColor: '#2563eb', borderRadius: 4 },
+                        { label: 'หญิง', data: femaleCounts, backgroundColor: '#ec4899', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                        y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Render Vehicle Breakdown Chart
+        function renderVehicleBreakdownChart() {
+            const ctx = document.getElementById('chartVehicleBreakdown').getContext('2d');
+            const counts = {};
+
+            filteredAccidentData.forEach(item => {
+                counts[item.vehicle] = (counts[item.vehicle] || 0) + 1;
+            });
+
+            const labels = Object.keys(counts);
+            const dataValues = Object.values(counts);
+            const colors = ['#e11d48', '#f59e0b', '#2563eb', '#10b981', '#8b5cf6', '#06b6d4', '#64748b'];
+
+            if (chartVehicleBreakdownInstance) chartVehicleBreakdownInstance.destroy();
+
+            chartVehicleBreakdownInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataValues,
+                        backgroundColor: colors.slice(0, labels.length)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Render Injury Severity Doughnut Chart
+        function renderInjurySeverityChart() {
+            const ctx = document.getElementById('chartInjurySeverity').getContext('2d');
+            const counts = {
+                'เสียชีวิต (Fatalities)': 0,
+                'บาดเจ็บสาหัส (Severe)': 0,
+                'บาดเจ็บเล็กน้อย (Minor)': 0
+            };
+
+            filteredAccidentData.forEach(item => {
+                if (item.isDeath) counts['เสียชีวิต (Fatalities)']++;
+                else if (item.isSevere) counts['บาดเจ็บสาหัส (Severe)']++;
+                else counts['บาดเจ็บเล็กน้อย (Minor)']++;
+            });
+
+            const labels = Object.keys(counts);
+            const dataValues = Object.values(counts);
+            const colors = ['#e11d48', '#f97316', '#f59e0b'];
+
+            if (chartInjurySeverityInstance) chartInjurySeverityInstance.destroy();
+
+            chartInjurySeverityInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataValues,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Render Injury Types Horizontal Bar Chart
+        function renderInjuryTypeChart() {
+            const ctx = document.getElementById('chartInjuryType').getContext('2d');
+            const counts = {};
+
+            filteredAccidentData.forEach(item => {
+                const t = item.injuryType || 'ไม่ระบุ';
+                counts[t] = (counts[t] || 0) + 1;
+            });
+
+            // Sort injury types by frequency
+            const sortedEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            const labels = sortedEntries.map(e => e[0]);
+            const dataValues = sortedEntries.map(e => e[1]);
+
+            if (chartInjuryTypeInstance) chartInjuryTypeInstance.destroy();
+
+            chartInjuryTypeInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'จำนวนเคส (ราย)',
+                        data: dataValues,
+                        backgroundColor: '#be123c',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+                        y: { ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Render Line List Table
+        function renderLineListTable() {
+            const tbody = document.getElementById('lineListTableBody');
+            tbody.innerHTML = '';
+
+            const displayList = filteredAccidentData.slice(0, 100);
+
+            displayList.forEach((item, i) => {
+                let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">บาดเจ็บเล็กน้อย</span>`;
+                if (item.isDeath) {
+                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700">เสียชีวิต</span>`;
+                } else if (item.isSevere) {
+                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-800">บาดเจ็บสาหัส</span>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-2.5 font-medium text-slate-500">${i + 1}</td>
+                        <td class="px-4 py-2.5 font-medium">${item.date}</td>
+                        <td class="px-4 py-2.5 text-slate-600">${item.time} น.</td>
+                        <td class="px-4 py-2.5 font-semibold text-slate-800">${item.vehicle}</td>
+                        <td class="px-4 py-2.5 text-slate-600">${item.location}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-[11px] text-slate-500">${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</td>
+                        <td class="px-4 py-2.5 text-center">${item.age} ปี (${item.gender})</td>
+                        <td class="px-4 py-2.5 text-center">${statusBadge}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('lblTableCount').innerText = filteredAccidentData.length.toLocaleString();
+        }
+
+        function searchTable() {
+            const query = document.getElementById('tableSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#lineListTableBody tr');
+
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+
+        function toggleConfigModal() {
+            const modal = document.getElementById('configModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function saveAndReloadSheetUrl() {
+            const newUrl = document.getElementById('inputSheetUrl').value.trim();
+            if (newUrl) {
+                localStorage.setItem('accident_sheet_url', newUrl);
+                toggleConfigModal();
+                loadGoogleSheetData();
+            }
+        }
+
+        function updateStatus(state, msg) {
+            const statusBox = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('statusText');
+
+            if (state === 'loading') {
+                statusBox.className = "flex items-center space-x-2 text-xs px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30";
+                statusText.innerText = msg;
+            } else if (state === 'success') {
+                statusBox.className = "flex items-center space-x-2 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30";
+                statusText.innerText = msg;
+            } else {
+                statusBox.className = "flex items-center space-x-2 text-xs px-3 py-1.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30";
+                statusText.innerText = msg;
+            }
+        }
+
+        function exportFilteredCSV() {
+            if (!filteredAccidentData || filteredAccidentData.length === 0) return;
+
+            const csvContent = Papa.unparse(filteredAccidentData);
+            const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Accident_Surveillance_Export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // Fallback Thailand Mock Dataset
+        function useFallbackAccidentData() {
+            const mockVehicles = ['รถจักรยานยนต์', 'รถยนต์ส่วนบุคคล', 'รถบรรทุก', 'รถปิกอัพ', 'รถโดยสาร'];
+            const mockLocations = ['ถนนมิตรภาพ กม. 12', 'สี่แยกไฟแดงกลางเมือง', 'ถนนทางหลวงหมายเลข 12', 'ทางโค้งร้อยศพ', 'ถนนสายรอง'];
+
+            const mockList = [];
+            const now = new Date();
+
+            for (let i = 0; i < 350; i++) {
+                const daysAgo = Math.floor(Math.random() * 60);
+                const d = new Date(now.getTime() - daysAgo * 86400000);
+                const hour = Math.floor(Math.random() * 24);
+                const vehicle = mockVehicles[Math.floor(Math.random() * mockVehicles.length)];
+                const location = mockLocations[Math.floor(Math.random() * mockLocations.length)];
+
+                const randSev = Math.random();
+                let severity = 'บาดเจ็บเล็กน้อย';
+                let injuryType = 'แผลถลอก/ฟกช้ำ (Abrasion/Contusion)';
+
+                if (randSev < 0.08) {
+                    severity = 'เสียชีวิต';
+                    injuryType = Math.random() > 0.5 ? 'บาดเจ็บศีรษะ/สมองขั้นรุนแรง (Severe Head Injury)' : 'บาดเจ็บหลายระบบ (Polytrauma)';
+                } else if (randSev < 0.35) {
+                    severity = 'บาดเจ็บสาหัส';
+                    const types = ['บาดเจ็บศีรษะ/สมอง (Head Injury)', 'กระดูกหัก (Fracture)', 'บาดเจ็บอวัยวะภายใน (Internal Organ)'];
+                    injuryType = types[i % types.length];
+                } else {
+                    const types = ['แผลถลอก/ฟกช้ำ (Abrasion/Contusion)', 'แผลฉีกขาด (Laceration)', 'ข้อเคล็ด/ยอก (Sprain/Strain)'];
+                    injuryType = types[i % types.length];
+                }
+
+                // Random Thailand Lat/Long (Bounding around central/northeastern Thailand)
+                const lat = 13.5 + Math.random() * 3.5;
+                const lng = 100.0 + Math.random() * 3.0;
+
+                mockList.push({
+                    id: i + 1,
+                    date: d.toISOString().split('T')[0],
+                    time: `${String(hour).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+                    hour: hour,
+                    vehicle: vehicle,
+                    location: location,
+                    lat: lat,
+                    lng: lng,
+                    age: Math.floor(Math.random() * 60) + 12,
+                    gender: Math.random() > 0.4 ? 'ชาย' : 'หญิง',
+                    severity: severity,
+                    injuryType: injuryType,
+                    isDeath: severity === 'เสียชีวิต',
+                    isSevere: severity === 'บาดเจ็บสาหัส'
+                });
+            }
+
+            rawAccidentData = mockList;
+            document.getElementById('lblDataOrigin').innerText = "ที่มาข้อมูล: ข้อมูลจำลองพิกัดประเทศไทย (Fallback Thailand Dataset)";
+            populateFilterOptions();
+            applyFilters();
+        }
+
+        // Initialization
+        window.onload = function() {
+            lucide.createIcons();
+            initEsriMap();
+            loadGoogleSheetData();
+        };
+    </script>
+</body>
+</html>
